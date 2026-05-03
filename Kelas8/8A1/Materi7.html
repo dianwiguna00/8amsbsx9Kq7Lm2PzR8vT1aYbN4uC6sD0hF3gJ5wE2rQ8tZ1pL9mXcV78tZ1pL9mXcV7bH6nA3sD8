@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 7</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu melihat daftar nilai siswa dan memperhatikan nama siswa serta nilai yang mereka peroleh?</li>
+<li>Jika semua nilai ulangan dikumpulkan, apakah semua nilai itu pasti dimiliki oleh setiap siswa?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+
+<div class="content" id="kontekstual">
+<ol>
+<li>Daftar siswa dan nilai ulangan yang diperoleh di kelas.</li>
+<li>Hubungan antara hari dan mata pelajaran pada jadwal sekolah.</li>
+<li>Hubungan antara nomor rumah dan pemiliknya di suatu lingkungan.</li>
+<li>Data tinggi badan siswa yang dicatat dalam buku kesehatan sekolah.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+
+<div class="content" id="tujuan">
+<ol>
+<li>Siswa mampu mengidentifikasi dan membedakan domain, kodomain, dan range dari suatu relasi atau fungsi serta menjelaskan maknanya dalam konteks kehidupan sehari-hari.</li>
+</ol>
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati contoh relasi dari data sederhana yang disajikan guru.</li>
+<li>Siswa berdiskusi dalam kelompok untuk menentukan mana yang termasuk domain, kodomain, dan range.</li>
+<li>Siswa menuliskan hasil diskusi dalam tabel atau daftar pasangan.</li>
+<li>Siswa mengerjakan latihan untuk mengidentifikasi domain, kodomain, dan range dari relasi yang diberikan.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+
+<div class="content" id="konsep">
+<strong>1. Domain</strong><br>
+Himpunan semua nilai input (masukan) dari suatu relasi atau fungsi.<br>
+Contoh: Nama siswa yang mengikuti ujian.<br><br>
+<strong>2. Kodomain</strong><br>
+Himpunan semua kemungkinan output (keluaran) yang dapat dihubungkan dengan domain.<br>
+Contoh: Semua nilai yang mungkin diperoleh (0–100).<br><br>
+<strong>3. Range</strong><br>
+Himpunan nilai output yang benar-benar berpasangan dengan domain.<br>
+Contoh: Nilai yang benar-benar diperoleh siswa (misalnya: 75, 80, 90).<br><br>
+<strong>Ilustrasi Sederhana:</strong><br>
+Jika relasi adalah:<br>
+- A → 75<br>
+- B → 80<br>
+- C → 90<br>
+Maka:<br>
+- Domain = {A, B, C}<br>
+- Kodomain = {0, 1, 2, ..., 100}<br>
+- Range = {75, 80, 90}
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+
+<div class="content" id="contoh">
+<strong>Contoh Soal 1:</strong><br>
+Diberikan relasi antara siswa dan nilai:<br>
+- Dika → 85<br>
+- Rani → 90<br>
+- Sinta → 75<br><br>
+Pertanyaan:<br>
+a. Tentukan domain, kodomain, dan range.<br>
+b. Apakah relasi ini fungsi?<br><br>
+<strong>Jawaban:</strong><br>
+- Domain = {Dika, Rani, Sinta}<br>
+- Kodomain = {0–100}<br>
+- Range = {85, 90, 75}<br>
+- Ya, karena setiap siswa memiliki satu nilai.<br><br>
+<strong>Contoh Soal 2:</strong><br>
+Relasi antara hari dan kegiatan:<br>
+- Senin → Upacara<br>
+- Selasa → Matematika<br>
+- Rabu → IPA<br>
+- Kamis → Bahasa<br>
+- Jumat → Seni<br><br>
+Pertanyaan:<br>
+a. Tentukan domain, kodomain, dan range.<br>
+b. Apakah relasi ini fungsi?<br><br>
+<strong>Jawaban:</strong><br>
+- Domain = {Senin, Selasa, Rabu, Kamis, Jumat}<br>
+- Kodomain = {Upacara, Matematika, IPA, Bahasa, Seni, Olahraga, Prakarya}<br>
+- Range = {Upacara, Matematika, IPA, Bahasa, Seni}<br>
+- Ya, karena setiap hari hanya memiliki satu kegiatan.
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+
+<div class="content" id="latihan">
+<ol>
+<li>Buat relasi antara siswa dan ekstrakurikuler yang diikuti.<br>
+a. Tentukan domain, kodomain, dan range.<br>
+b. Apakah relasi tersebut fungsi?</li>
+<li>Relasi antara nomor rumah dan pemilik rumah:<br>
+a. Tentukan domain, kodomain, dan range.<br>
+b. Apakah relasi tersebut fungsi?</li>
+<li>Buat relasi dari kehidupan sehari-hari dan identifikasi domain, kodomain, dan range-nya.</li>
+</ol>
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+
+<div class="content" id="refleksi">
+<ol>
+<li>Apa perbedaan antara kodomain dan range?</li>
+<li>Mengapa penting mengetahui domain dan range dalam suatu fungsi?</li>
+<li>Dapatkah kamu menemukan contoh fungsi dari kehidupanmu sendiri?</li>
+<li>Siswa diminta menuliskan satu relasi dari kehidupan mereka (misalnya: hari dan kegiatan, siswa dan nilai, atau lainnya), lalu mengidentifikasi domain, kodomain, dan range-nya serta menjelaskan apakah relasi tersebut merupakan fungsi.</li>
+</ol>
+</div>
+
+
+</div>
+</div>
+</body>
+</html>

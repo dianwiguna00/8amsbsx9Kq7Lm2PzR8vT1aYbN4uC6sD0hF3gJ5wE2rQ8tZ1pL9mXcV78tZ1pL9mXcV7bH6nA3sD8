@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 28</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu menggunakan data keuangan untuk membuat keputusan penting?</li>
+<li>Bagaimana cara memastikan kesimpulan yang diambil dari grafik sudah tepat?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+
+<div class="content" id="kontekstual">
+<ol>
+<li>Mengevaluasi pengeluaran dan pendapatan dari data tabungan atau penjualan.</li>
+<li>Membandingkan dua pilihan keuangan berdasarkan grafik.</li>
+<li>Memprediksi keuntungan atau kerugian dari suatu kegiatan usaha sederhana.</li>
+<li>Menarik kesimpulan dari laporan keuangan harian atau mingguan.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+
+<div class="content" id="tujuan">
+<ol>
+<li>Siswa mampu menyimpulkan dan mengevaluasi data keuangan yang disajikan dalam bentuk grafik garis lurus serta mengomunikasikan hasil analisisnya secara jelas.</li>
+</ol>
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati grafik garis lurus yang menunjukkan data keuangan sederhana.</li>
+<li>Siswa berdiskusi untuk mengidentifikasi informasi penting dan tren pada grafik.</li>
+<li>Siswa menyimpulkan hasil analisis grafik dalam bentuk tulisan singkat.</li>
+<li>Siswa mempresentasikan hasil analisis dan menerima umpan balik dari teman.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+
+<div class="content" id="konsep">
+Grafik garis lurus membantu dalam mengevaluasi data keuangan dengan cara:<br>
+Menunjukkan kecenderungan naik atau turun dari data.<br>
+Membantu membuat prediksi untuk periode berikutnya.<br>
+Mendukung pengambilan keputusan yang lebih rasional.<br><br>
+Kesimpulan dari grafik diperoleh dengan memperhatikan:<br>
+Titik potong sebagai nilai awal.<br>
+Gradien sebagai laju perubahan.<br>
+Arah garis sebagai tren data.
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+
+<div class="content" id="contoh">
+<strong>Soal:</strong><br>
+Sebuah usaha kecil mencatat pendapatan harian yang bertambah secara teratur. Grafik menunjukkan bahwa pendapatan awal adalah Rp100.000 dan bertambah Rp50.000 setiap hari.<br><br>
+Pertanyaan:<br>
+Apa arti titik potong dan gradien pada grafik tersebut?<br>
+Berapa pendapatan pada hari ke-5?<br><br>
+<strong>Jawaban:</strong><br>
+Titik potong menunjukkan pendapatan awal Rp100.000.<br>
+Gradien menunjukkan kenaikan pendapatan Rp50.000 per hari.<br>
+Pendapatan hari ke-5 = 100.000 + 5 × 50.000 = 350.000
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+
+<div class="content" id="latihan">
+<ol>
+<li>Sebuah grafik menunjukkan tabungan seseorang dengan nilai awal Rp200.000 dan bertambah Rp25.000 setiap minggu.<br>
+a. Tuliskan persamaan garisnya.<br>
+b. Tentukan tabungan pada minggu ke-8.<br>
+c. Jelaskan makna grafik tersebut.</li>
+<li>Buat satu contoh grafik data keuangan dari kehidupan sehari-hari, lalu jelaskan kesimpulan yang dapat diambil.</li>
+</ol>
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+
+<div class="content" id="refleksi">
+<ol>
+<li>Apa manfaat menganalisis grafik sebelum mengambil keputusan keuangan?</li>
+<li>Bagaimana grafik membantu kamu memahami data dengan lebih cepat?</li>
+<li>Apa kesalahan yang perlu dihindari saat menafsirkan grafik?</li>
+<li>Siswa diminta menuliskan satu pengalaman menggunakan data atau grafik untuk mengambil keputusan sederhana dalam kehidupan sehari-hari.</li>
+</ol>
+</div>
+
+
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 20</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu melihat data dalam bentuk diagram batang, garis, atau lingkaran? Menurutmu, mengapa data perlu disajikan dalam bentuk gambar?</li>
+<li>Jika kamu ingin membandingkan data dari beberapa kategori atau melihat perubahan dari waktu ke waktu, diagram apa yang paling mudah dipahami?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+
+<div class="content" id="kontekstual">
+<ol>
+<li>Menyajikan data jumlah siswa berdasarkan hobi dalam bentuk diagram batang.</li>
+<li>Menampilkan perubahan suhu harian atau cuaca selama seminggu dalam diagram garis.</li>
+<li>Menunjukkan persentase jenis makanan favorit siswa dalam diagram lingkaran.</li>
+<li>Menyajikan data kehadiran siswa dalam bentuk diagram untuk laporan kelas.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+
+<div class="content" id="tujuan">
+<ol>
+<li>Siswa mampu menyajikan data dalam bentuk diagram batang, garis, dan lingkaran secara tepat dan menarik.</li>
+</ol>
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati contoh tabel data dan berbagai jenis diagram yang sesuai.</li>
+<li>Siswa berdiskusi kelompok untuk menentukan jenis diagram yang tepat untuk suatu data.</li>
+<li>Siswa mengubah data dari tabel menjadi diagram batang, garis, atau lingkaran.</li>
+<li>Siswa mengerjakan latihan membuat dan membaca diagram berdasarkan data yang diberikan.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+
+<div class="content" id="konsep">
+<strong>Tujuan Penyajian Data dalam Diagram</strong><br>
+Mempermudah pembacaan dan interpretasi data<br>
+Menyampaikan informasi secara visual dan ringkas<br>
+Menunjukkan pola, tren, dan perbandingan<br><br>
+<strong>Jenis Diagram:</strong><br>
+Diagram Batang<br>
+Menampilkan data dalam bentuk batang vertikal atau horizontal. Cocok untuk membandingkan kategori.<br><br>
+Diagram Garis<br>
+Menampilkan data dalam bentuk titik-titik yang dihubungkan garis. Cocok untuk menunjukkan perubahan dari waktu ke waktu.<br><br>
+Diagram Lingkaran (Pie Chart)<br>
+Menampilkan data sebagai bagian dari keseluruhan (100%). Cocok untuk menunjukkan proporsi.
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+
+<div class="content" id="contoh">
+<strong>Contoh Soal 1: Diagram Batang</strong><br>
+Data jumlah siswa yang memiliki hewan peliharaan:
+<table>
+<tr>
+<th>Jenis Hewan</th>
+<th>Jumlah Siswa</th>
+</tr>
+<tr>
+<td>Kucing</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Anjing</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Ikan</td>
+<td>7</td>
+</tr>
+<tr>
+<td>Burung</td>
+<td>4</td>
+</tr>
+</table>
+Tugas: Buat diagram batang vertikal berdasarkan data tersebut.<br><br>
+
+<strong>Contoh Soal 2: Diagram Garis</strong><br>
+Data suhu harian selama 5 hari:
+<table>
+<tr>
+<th>Hari</th>
+<th>Suhu (°C)</th>
+</tr>
+<tr>
+<td>Senin</td>
+<td>30</td>
+</tr>
+<tr>
+<td>Selasa</td>
+<td>32</td>
+</tr>
+<tr>
+<td>Rabu</td>
+<td>31</td>
+</tr>
+<tr>
+<td>Kamis</td>
+<td>33</td>
+</tr>
+<tr>
+<td>Jumat</td>
+<td>30</td>
+</tr>
+</table>
+Tugas: Buat diagram garis untuk menunjukkan perubahan suhu.<br><br>
+
+<strong>Contoh Soal 3: Diagram Lingkaran</strong><br>
+Data jenis minuman favorit dari 40 siswa:<br>
+Teh: 10 siswa<br>
+Kopi: 8 siswa<br>
+Jus: 12 siswa<br>
+Air mineral: 10 siswa<br>
+Tugas: Buat diagram lingkaran dan tentukan besar sudut untuk masing-masing kategori.<br>
+Penyelesaian:<br>
+Teh: (10/40) × 360° = 90°<br>
+Kopi: (8/40) × 360° = 72°<br>
+Jus: (12/40) × 360° = 108°<br>
+Air mineral: (10/40) × 360° = 90°
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+
+<div class="content" id="latihan">
+<ol>
+<li>Buat diagram batang dari data jumlah buku yang dibaca siswa dalam seminggu.</li>
+<li>Buat diagram garis dari data tinggi tanaman yang diukur setiap hari selama 7 hari.</li>
+<li>Buat diagram lingkaran dari data hobi siswa di kelasmu (gunakan persentase atau jumlah).</li>
+<li>Jelaskan kelebihan dan kekurangan masing-masing jenis diagram.</li>
+</ol>
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+
+<div class="content" id="refleksi">
+<ol>
+<li>- Diagram mana yang paling mudah kamu pahami? Mengapa?</li>
+<li>- Bagaimana diagram membantu menyampaikan informasi lebih jelas daripada tabel?</li>
+<li>Minta siswa memilih satu jenis diagram, membuatnya berdasarkan data yang mereka kumpulkan sendiri, lalu mempresentasikan hasilnya di depan kelas.</li>
+</ol>
+</div>
+
+</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<meta http-equiv="Content-Security-Policy"
+      content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob: file:;">
+
+<title>Pertemuan</title>
+
+<style>
+*{box-sizing:border-box;}
+
+body{
+    font-family:'Segoe UI',sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#11998e,#38ef7d);
+    touch-action:manipulation;
+}
+
+.container{
+    max-width:1200px;
+    margin:auto;
+    padding:14px;
+}
+
+h1{
+    text-align:center;
+    color:white;
+    margin-bottom:6px;
+}
+
+#progress{
+    text-align:center;
+    color:white;
+    font-size:clamp(14px,2vw,20px);
+    margin-bottom:10px;
+}
+
+.card{
+    background:white;
+    border-radius:18px;
+    padding:16px;
+    box-shadow:0 10px 25px rgba(0,0,0,.25);
+}
+
+button{
+    width:100%;
+    padding:14px;
+    font-size:clamp(20px,2.5vw,26px);
+    border:none;
+    border-radius:14px;
+    margin-bottom:6px;
+    color:white;
+    text-align:left;
+    cursor:pointer;
+}
+button:active{opacity:.85;}
+
+.pemantik{background:#2980b9;}
+.kontekstual{background:#8e44ad;}
+.tujuan{background:#16a085;}
+.aktivitas{background:#e67e22;}
+.konsep{background:#27ae60;}
+.contoh{background:#3498db;}
+.latihan{background:#d35400;}
+.refleksi{background:#c0392b;}
+
+.content{
+    display:none;
+    font-size:clamp(20px,2.5vw,28px);
+    line-height:1.45;
+    color:#2c3e50;
+    padding:10px;
+    margin-bottom:12px;
+    cursor:pointer;
+    user-select:none;
+}
+
+.step-img{
+    width:100%;
+    height:auto;
+    display:block;
+}
+
+.content p{margin:0 0 8px 0;}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-wrap table{
+    width:100%;
+    min-width:600px;
+}
+
+th,td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+/* ✅ TAMBAHAN: indikator tap */
+.tap-indicator{
+    position: sticky;
+    bottom: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #7f8c8d;
+    opacity:.8;
+    animation: tapPulse 1.6s infinite;
+    pointer-events:none;
+    user-select:none;
+}
+
+@keyframes tapPulse{
+    0%{opacity:.2;}
+    50%{opacity:.9;}
+    100%{opacity:.2;}
+}
+
+@media (max-width:600px){
+    button{font-size:18px;padding:12px;}
+    .content{font-size:18px;}
+}
+</style>
+
+<script>
+let steps = [];
+let stepIndex = 0;
+let activeContent = null;
+let lock = false;
+
+const progressMap = {};
+const builtMap = {};
+
+/* ===============================
+   AMBIL STEP (TETAP SEPERTI ASLI)
+================================ */
+function collectSteps(container){
+    let result = [];
+    const clone = container.cloneNode(true);
+
+    clone.querySelectorAll("li").forEach(li=>{
+        li.after(document.createTextNode("\n"));
+    });
+
+    clone.querySelectorAll("table").forEach(t=>t.remove());
+
+    let rawText = clone.textContent
+        .replace(/\r/g,'')
+        .replace(/([.?])\s+/g,"$1\n");
+
+    rawText.split('\n').map(l=>l.trim()).forEach(line=>{
+        if(!line) return;
+
+        const imgMatches = [...line.matchAll(/\[\[img:(.+?)\]\]/g)];
+        const clean = line.replace(/\[\[img:.+?\]\]/g,"").trim();
+
+        if(clean){
+            const p=document.createElement("p");
+            p.textContent=clean;
+            result.push(p);
+        }
+
+        imgMatches.forEach(m=>{
+            const img=document.createElement("img");
+            img.src=m[1];
+            img.className="step-img";
+            img.loading="lazy";
+            result.push(img);
+        });
+    });
+
+    container.querySelectorAll("table").forEach(t=>{
+        result.push(t.cloneNode(true));
+    });
+
+    return result;
+}
+
+/* ✅ TAMBAHAN */
+function updateTapIndicator(){
+    const el=document.getElementById("tapIndicator");
+    if(!el) return;
+
+    if(activeContent && stepIndex < steps.length){
+        el.style.display="block";
+    }else{
+        el.style.display="none";
+    }
+}
+
+/* PROGRESS */
+function updateProgress(){
+    const p=document.getElementById("progress");
+    p.textContent=activeContent
+        ? `Langkah ${stepIndex} / ${steps.length}`
+        : "";
+}
+
+/* TOGGLE */
+function toggle(id){
+    document.querySelectorAll('.content').forEach(c=>{
+        if(c.id!==id) c.style.display="none";
+    });
+
+    const el=document.getElementById(id);
+
+    if(activeContent===el && el.style.display==="block"){
+        el.style.display="none";
+        activeContent=null;
+        updateProgress();
+        updateTapIndicator(); // ✅
+        return;
+    }
+
+    el.style.display="block";
+    activeContent=el;
+
+    if(!builtMap[id]){
+        steps=collectSteps(el);
+        el.innerHTML="";
+        stepIndex=0;
+        progressMap[id]=0;
+        builtMap[id]=steps;
+        showNext();
+    }else{
+        steps=builtMap[id];
+        stepIndex=progressMap[id];
+    }
+
+    updateProgress();
+    updateTapIndicator(); // ✅
+}
+
+/* NEXT STEP */
+function showNext(){
+    if(lock||!activeContent) return;
+    lock=true;
+
+    if(stepIndex<steps.length){
+        activeContent.appendChild(steps[stepIndex]);
+        stepIndex++;
+        progressMap[activeContent.id]=stepIndex;
+        updateProgress();
+        updateTapIndicator(); // ✅
+    }
+
+    setTimeout(()=>lock=false,250);
+}
+
+/* INTERAKSI TAP */
+let startX=0,startY=0,moved=false;
+document.addEventListener("pointerdown",e=>{
+    if(e.target.closest("button")) return;
+    if(!activeContent) return;
+    startX=e.clientX;
+    startY=e.clientY;
+    moved=false;
+});
+
+document.addEventListener("pointermove",e=>{
+    if(Math.abs(e.clientX-startX)>15 || Math.abs(e.clientY-startY)>15){
+        moved=true;
+    }
+});
+
+document.addEventListener("pointerup",()=>{
+    if(!activeContent||moved) return;
+    showNext();
+});
+</script>
+</head>
+
+<body>
+<div class="container">
+<h1>📘 Materi 25</h1>
+<div id="progress"></div>
+
+<div class="card">
+
+<button class="pemantik" onclick="toggle('pemantik')">💡 Pemantik</button>
+
+<div class="content" id="pemantik">
+<ol>
+<li>Pernahkah kamu memilih sesuatu berdasarkan data, seperti hasil survei, peringkat, atau jumlah suara? Mengapa data itu kamu anggap penting?</li>
+<li>Jika harus menentukan pilihan terbaik, menurutmu lebih baik mengandalkan perkiraan atau berdasarkan data? Mengapa?</li>
+</ol>
+</div>
+
+<button class="kontekstual" onclick="toggle('kontekstual')">🌍 Penerapan Kontekstual</button>
+
+<div class="content" id="kontekstual">
+<ol>
+<li>Menentukan jajanan yang paling banyak diminati siswa berdasarkan data penjualan kantin.</li>
+<li>Memilih kegiatan ekstrakurikuler berdasarkan jumlah peminat.</li>
+<li>Menentukan waktu belajar yang efektif berdasarkan data kebiasaan siswa.</li>
+<li>Mengambil keputusan di rumah, seperti menentukan waktu tidur dari data aktivitas harian.</li>
+</ol>
+</div>
+
+<button class="tujuan" onclick="toggle('tujuan')">🎯 Tujuan Pembelajaran</button>
+
+<div class="content" id="tujuan">
+<ol>
+<li>Siswa mampu menjelaskan peran statistika dalam kehidupan sehari-hari dan bagaimana data dapat digunakan untuk mendukung pengambilan keputusan yang tepat.</li>
+</ol>
+</div>
+
+<button class="aktivitas" onclick="toggle('aktivitas')">📚 Aktivitas Inti</button>
+
+<div class="content" id="aktivitas">
+<ol>
+<li>Siswa mengamati contoh data sederhana yang digunakan untuk mengambil keputusan.</li>
+<li>Siswa berdiskusi kelompok tentang keputusan apa yang bisa diambil dari data tersebut.</li>
+<li>Siswa berlatih menganalisis data sederhana dan menarik keputusan bersama.</li>
+<li>Siswa menyampaikan hasil diskusi dan alasan keputusan yang diambil.</li>
+</ol>
+</div>
+
+<button class="konsep" onclick="toggle('konsep')">🧠 Pemahaman Konsep</button>
+
+<div class="content" id="konsep">
+<strong>Apa itu Statistika?</strong><br>
+Statistika adalah ilmu yang mempelajari cara mengumpulkan, menyajikan, menganalisis, dan menginterpretasi data untuk membuat kesimpulan atau keputusan.<br><br>
+<strong>Peran Statistika dalam Kehidupan Sehari-Hari:</strong><br>
+Menentukan tren pembelajaran siswa<br>
+Membantu pengambilan keputusan bisnis (penjualan, stok barang)<br>
+Menyusun kebijakan publik berdasarkan survei masyarakat<br>
+Memahami kebiasaan konsumsi atau perilaku sosial<br>
+Membantu perencanaan kegiatan berdasarkan data partisipasi<br><br>
+<strong>Contoh Penggunaan:</strong><br>
+Sekolah menggunakan data kehadiran untuk menentukan program motivasi<br>
+Pedagang menggunakan data penjualan untuk menentukan produk yang paling laku<br>
+Pemerintah menggunakan data kependudukan untuk merancang program bantuan
+</div>
+
+<button class="contoh" onclick="toggle('contoh')">✍️ Contoh Soal</button>
+
+<div class="content" id="contoh">
+<strong>Contoh Soal 1: Studi Kasus</strong><br>
+Sebuah kantin sekolah mencatat data penjualan selama seminggu:
+<table>
+<tr>
+<th>Hari</th>
+<th>Jumlah Makanan Terjual</th>
+</tr>
+<tr>
+<td>Senin</td>
+<td>120</td>
+</tr>
+<tr>
+<td>Selasa</td>
+<td>150</td>
+</tr>
+<tr>
+<td>Rabu</td>
+<td>130</td>
+</tr>
+<tr>
+<td>Kamis</td>
+<td>160</td>
+</tr>
+<tr>
+<td>Jumat</td>
+<td>140</td>
+</tr>
+</table>
+Pertanyaan:<br>
+Hari apa penjualan tertinggi?<br>
+Apa keputusan yang bisa diambil oleh pengelola kantin berdasarkan data ini?<br>
+Jawaban:<br>
+Penjualan tertinggi: Kamis<br>
+Keputusan: Menambah stok makanan pada hari Kamis<br><br>
+
+<strong>Contoh Soal 2: Survei Minat Ekstrakurikuler</strong>
+<table>
+<tr>
+<th>Kegiatan</th>
+<th>Jumlah Peminat</th>
+</tr>
+<tr>
+<td>Pramuka</td>
+<td>25</td>
+</tr>
+<tr>
+<td>Basket</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Musik</td>
+<td>12</td>
+</tr>
+<tr>
+<td>Bahasa Inggris</td>
+<td>15</td>
+</tr>
+</table>
+Pertanyaan:<br>
+Kegiatan mana yang paling diminati?<br>
+Bagaimana sekolah bisa menggunakan data ini?<br>
+Jawaban:<br>
+Paling diminati: Pramuka<br>
+Sekolah bisa menambah jadwal atau fasilitas untuk kegiatan Pramuka
+</div>
+
+<button class="latihan" onclick="toggle('latihan')">📝 Latihan Soal</button>
+
+<div class="content" id="latihan">
+<ol>
+<li>Buat contoh situasi di mana data digunakan untuk mengambil keputusan di rumah, sekolah, atau lingkungan.</li>
+<li>Kumpulkan data sederhana (misalnya: waktu tidur siswa selama seminggu), lalu buat kesimpulan dan saran berdasarkan data tersebut.</li>
+<li>Jelaskan bagaimana statistika membantu kamu membuat keputusan yang lebih baik dalam kehidupan sehari-hari.</li>
+</ol>
+</div>
+
+<button class="refleksi" onclick="toggle('refleksi')">🔍 Refleksi Pembelajaran</button>
+
+<div class="content" id="refleksi">
+<ol>
+<li>- Pernahkah kamu membuat keputusan berdasarkan data? Ceritakan!</li>
+<li>- Bagaimana kamu bisa menggunakan statistika untuk membantu orang lain?</li>
+<li>Minta siswa menuliskan satu contoh nyata dari kehidupan mereka di mana data membantu mereka atau orang lain mengambil keputusan, lalu bagikan dalam kelompok kecil.</li>
+</ol>
+</div>
+
+</div>
+</div>
+</body>
+</html>
